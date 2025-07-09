@@ -2,19 +2,13 @@
 
 namespace APP\plugins\generic\xmlConverter\handlers;
 
-use APP\core\Request;
 use APP\core\Services;
 use APP\facades\Repo;
-use APP\handler\Handler;
 use APP\plugins\generic\xmlConverter\XmlConverterPlugin;
-use Illuminate\Http\Response;
 use PKP\core\Core;
 use PKP\core\JSONMessage;
-use PKP\core\PKPRequest;
 use PKP\file\PrivateFileManager;
 use PKP\plugins\PluginRegistry;
-use PKP\security\authorization\WorkflowStageAccessPolicy;
-use PKP\security\Role;
 
 /**
  * Class XmlConverterHandler
