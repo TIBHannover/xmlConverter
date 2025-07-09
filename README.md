@@ -12,7 +12,7 @@ The original implementation was created by [TIB](https://www.tib.eu) and develop
 
 ## Compatible OJS Versions
 
-- [ ] 3.3.0
+- [X] 3.3.0
 - [X] 3.4.0  (release: *stable-3_4_0*)
 - [X] 3.5.0
 
@@ -21,11 +21,11 @@ The original implementation was created by [TIB](https://www.tib.eu) and develop
 From the root directory of the OJS 3.5.0 release package:
 
 ```bash
-$ git clone -b stable-3_5_0 https://github.com/withanage/xmlConverter.git plugins/generic/xmlConverter
+$ git clone -b stable-3_5_0 https://github.com/TIBHannover/xmlConverter.git plugins/generic/xmlConverter
 $ php lib/pkp/tools/installPluginVersion.php plugins/generic/xmlConverter/version.xml
 $ npm install
-$ npm run dev  (developments)
-$ npm run build (productions)
+$ npm run dev  #(developments)
+$ npm run build #(productions)
 ```
 
 ## Activation
