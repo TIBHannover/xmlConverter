@@ -2,6 +2,7 @@
 
 import('lib.pkp.classes.plugins.GenericPlugin');
 import('lib.pkp.classes.linkAction.request.AjaxAction');
+import('lib.pkp.classes.linkAction.request.AjaxModal');
 
 class xmlConverterPlugin extends GenericPlugin
 {
@@ -11,17 +12,50 @@ class xmlConverterPlugin extends GenericPlugin
 
 		if (parent::register($category, $path, $mainContextId)) {
 			if ($this->getEnabled()) {
-				$javaChecker = exec('command java --version >/dev/null && echo "yes" || echo "no"');
-				if($javaChecker=='yes') {
-					HookRegistry::register('LoadHandler', array($this, 'callbackLoadHandler'));
-					HookRegistry::register('TemplateManager::fetch', array($this, 'templateFetchCallback'));
+				// Register hooks that don't require Java
+				HookRegistry::register('LoadHandler', array($this, 'callbackLoadHandler'));
+				HookRegistry::register('TemplateManager::fetch', array($this, 'templateFetchCallback'));
+				HookRegistry::register('editorsubmissiondetailsfilesgridhandler::initfeatures', [$this, 'addActionsToFileGrid']);
+				HookRegistry::register('editorreviewfilesgridhandler::initfeatures', [$this, 'addActionsToFileGrid']);
+				HookRegistry::register('copyeditfilesgridhandler::initfeatures', [$this, 'addActionsToFileGrid']);
+				HookRegistry::register('productionreadyfilesgridhandler::initfeatures', [$this, 'addActionsToFileGrid']);
 
-					$this->_registerTemplateResource();
-				}
+				$this->_registerTemplateResource();
 			}
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Add "Add external File" action to file grids
+	 */
+	function addActionsToFileGrid()
+	{
+		$request = Application::get()->getRequest();
+		$dispatcher = $request->getDispatcher();
+		$request->getRouter()->getHandler()->addAction(
+			new LinkAction(
+				'services_add_file',
+				new AjaxModal(
+					$dispatcher->url($request, ROUTE_PAGE, null, 'xmlConverterConverter', 'createServiceFileForm', null, $request->getUserVars()),
+					__('plugins.generic.xmlConverter.createServiceFile.upload'),
+					'modals_services_add_file'
+				),
+				__('plugins.generic.xmlConverter.createServiceFile.add_file'),
+				''
+			)
+		);
+	}
+
+	/**
+	 * Check if Java is available for XML conversion features
+	 * @return bool
+	 */
+	function isJavaAvailable()
+	{
+		$javaChecker = exec('command java --version >/dev/null && echo "yes" || echo "no"');
+		return $javaChecker == 'yes';
 	}
 
 	function getPluginUrl($request) {
@@ -60,6 +94,7 @@ class xmlConverterPlugin extends GenericPlugin
 				$submissionId = $submissionFile->getData('submissionId');
 				$submission = Services::get('submission')->get($submissionId);
 				$submissionStageId = $submission->getData('stageId');
+				$fileStage = SUBMISSION_FILE_PRODUCTION_READY;
 
 				$roles = $request->getUser()->getRoles($request->getContext()->getId());
 				$extensionSupported = in_array(strtolower($fileExtension), static::getSupportedMimetypes());
@@ -74,10 +109,19 @@ class xmlConverterPlugin extends GenericPlugin
 					}
 				}
 
-				if ($extensionSupported && $accessAllowed && $stageAllowed && 	$workflowAllowed)
+				if ($extensionSupported && $accessAllowed && $stageAllowed && $workflowAllowed)
 				{
-					$this->createJatsToTeiButton($dispatcher, $request, $submissionId, $submissionFile, $stageId, $row);
-					$this->creatTEIToJatsButton($dispatcher, $request, $submissionId, $submissionFile, $stageId, $row);
+					// Add Create Galley button for XML files
+					if (strtolower($fileExtension) == 'text/xml' || strtolower($fileExtension) == 'application/xml') {
+						$this->_createGalleyAction($row, $dispatcher, $request, $submissionFile, $stageId, $fileStage);
+					}
+
+					// Add conversion buttons (only if Java is available)
+					if ($this->isJavaAvailable()) {
+						$this->createJatsToTeiButton($dispatcher, $request, $submissionId, $submissionFile, $stageId, $row);
+						$this->creatTEIToJatsButton($dispatcher, $request, $submissionId, $submissionFile, $stageId, $row);
+					}
+					$this->createProcessJatsImagesButton($dispatcher, $request, $submissionId, $submissionFile, $stageId, $row);
 				}
 
 				}
@@ -106,10 +150,11 @@ class xmlConverterPlugin extends GenericPlugin
 			$pageOperator = "$page/$op";
 			switch ($pageOperator) {
 				case "xmlConverterConverter/convertToJats":
-					$this->import('handlers/XMLConverterHandler');
-					define('HANDLER_CLASS', 'xmlConverterHandler');
-					return true;
 				case "xmlConverterConverter/convertToTei":
+				case "xmlConverterConverter/processJatsImages":
+				case "xmlConverterConverter/createGalleyForm":
+				case "xmlConverterConverter/createGalley":
+				case "xmlConverterConverter/createServiceFileForm":
 					$this->import('handlers/XMLConverterHandler');
 					define('HANDLER_CLASS', 'xmlConverterHandler');
 					return true;
@@ -148,7 +193,7 @@ class xmlConverterPlugin extends GenericPlugin
 		$linkAction = new LinkAction(
 			'convertteiConverter',
 			new PostAndRedirectAction($jatsDispatcherPath, $pathRedirect),
-			__('plugins.generic.xmlConverter.button.convertToTei')
+			__('plugins.generic.xmlConverter.button.convertToJats')
 		);
 		$row->addAction($linkAction);
 	}
@@ -172,7 +217,7 @@ class xmlConverterPlugin extends GenericPlugin
 		$linkAction = new LinkAction(
 			'convertJATSConverter',
 			new PostAndRedirectAction($teiDispatcherPath, $pathRedirect),
-			__('plugins.generic.xmlConverter.button.convertToJats')
+			__('plugins.generic.xmlConverter.button.convertToTei')
 		);
 
 		$row->addAction($linkAction);
@@ -180,5 +225,118 @@ class xmlConverterPlugin extends GenericPlugin
 
 	}
 
+	public function createProcessJatsImagesButton(?Dispatcher $dispatcher, PKPRequest $request, $submissionId, mixed $submissionFile, int $stageId, $row): void
+	{
+		$processImagesPath = $dispatcher->url($request, ROUTE_PAGE, null, 'xmlConverterConverter', 'processJatsImages', null,
+			array(
+				'submissionId' => $submissionId,
+				'fileId' => $submissionFile->getData('fileId'),
+				'stageId' => $stageId
+			));
+		$pathRedirect = $dispatcher->url($request, ROUTE_PAGE, null, 'workflow', 'access',
+			array(
+				'submissionId' => $submissionId,
+				'fileId' => $submissionFile->getData('fileId'),
+				'stageId' => $stageId
+			));
 
+		$linkAction = new LinkAction(
+			'processJatsImages',
+			new PostAndRedirectAction($processImagesPath, $pathRedirect),
+			__('plugins.generic.xmlConverter.button.processJatsImages')
+		);
+		$row->addAction($linkAction);
+	}
+
+	/**
+	 * Adds create galley action to files grid
+	 * @param $row SubmissionFilesGridRow
+	 * @param Dispatcher $dispatcher
+	 * @param PKPRequest $request
+	 * @param $submissionFile SubmissionFile
+	 * @param int $stageId
+	 * @param int $fileStage
+	 */
+	private function _createGalleyAction($row, Dispatcher $dispatcher, PKPRequest $request, $submissionFile, int $stageId, int $fileStage): void
+	{
+
+		$actionArgs = array(
+			'submissionId' => $submissionFile->getData('submissionId'),
+			'stageId' => $stageId,
+			'fileStage' => $fileStage,
+			'submissionFileId' => $submissionFile->getData('id')
+		);
+		$row->addAction(new LinkAction(
+			'createGalleyForm',
+			new AjaxModal(
+				$dispatcher->url(
+					$request,
+					ROUTE_PAGE,
+					null,
+					'xmlConverterConverter',
+					'createGalleyForm',
+					null,
+					$actionArgs
+				),
+				__('submission.layout.newGalley')
+			),
+			__('plugins.generic.xmlConverter.links.createGalley'),
+			null
+		));
+
+	}
+
+	/**
+	 * @copydoc Plugin::getActions()
+	 */
+	public function getActions($request, $actionArgs): array
+	{
+		$router = $request->getRouter();
+		import('lib.pkp.classes.linkAction.request.AjaxModal');
+		return array_merge(
+			$this->getEnabled() ? [
+				new LinkAction(
+					'settings',
+					new AjaxModal(
+						$router->url($request, null, null, 'manage', null, [
+							'verb' => 'settings',
+							'plugin' => $this->getName(),
+							'category' => 'generic'
+						]),
+						$this->getDisplayName()
+					),
+					__('manager.plugins.settings'),
+					null
+				),
+			] : [],
+			parent::getActions($request, $actionArgs)
+		);
+	}
+
+	/**
+	 * @copydoc Plugin::manage()
+	 */
+	public function manage($args, $request)
+	{
+		switch ($request->getUserVar('verb')) {
+			case 'settings':
+				$context = $request->getContext();
+				$contextId = $context ? $context->getId() : CONTEXT_SITE;
+
+				$this->import('classes/SettingsForm');
+				$form = new SettingsForm($this, $contextId);
+
+				if ($request->getUserVar('save')) {
+					$form->readInputData();
+					if ($form->validate()) {
+						$form->execute();
+						return new JSONMessage(true);
+					}
+				} else {
+					$form->initData();
+				}
+				return new JSONMessage(true, $form->fetch($request));
+		}
+		return parent::manage($args, $request);
+	}
 }
