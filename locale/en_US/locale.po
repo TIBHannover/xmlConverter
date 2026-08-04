@@ -99,3 +99,60 @@ msgstr "Enable JATS image processing"
 
 msgid "plugins.generic.xmlConverter.settings.javaNotAvailable"
 msgstr "Java is not available on this server. TEI/JATS conversion features are disabled."
+
+msgid "plugins.generic.xmlConverter.generate.linkLabel"
+msgstr "Generate publication XML"
+
+msgid "plugins.generic.xmlConverter.generate.error.noSource"
+msgstr "Source XML file could not be loaded."
+
+msgid "plugins.generic.xmlConverter.generate.error.cleaning"
+msgstr "Could not clean source XML: {$msg}"
+
+msgid "plugins.generic.xmlConverter.generate.error.invalidXml"
+msgstr "Cleaned XML is not valid."
+
+msgid "plugins.generic.xmlConverter.generate.modalTitle"
+msgstr "Generate publication XML — preview"
+
+msgid "plugins.generic.xmlConverter.generate.preview.intro"
+msgstr "A new publication.xml will be created next to the untouched original. The OJS values below will overwrite the corresponding ORKG fields."
+
+msgid "plugins.generic.xmlConverter.generate.preview.note"
+msgstr "Every field listed below is overwritten. Fields without OJS data are skipped — no placeholders, no errors."
+
+msgid "plugins.generic.xmlConverter.generate.preview.skipped"
+msgstr "No OJS data available — this block is skipped."
+
+msgid "plugins.generic.xmlConverter.generate.preview.journalMeta"
+msgstr "Journal metadata (journal-id, ISSN, publisher)"
+
+msgid "plugins.generic.xmlConverter.generate.preview.pubDate"
+msgstr "Publication date"
+
+msgid "plugins.generic.xmlConverter.generate.preview.history"
+msgstr "History (received / accepted / published)"
+
+msgid "plugins.generic.xmlConverter.generate.preview.permissions"
+msgstr "Permissions / license (CC BY 4.0)"
+
+msgid "plugins.generic.xmlConverter.generate.preview.contribGroup"
+msgstr "Contributors (authors, emails, affiliations)"
+
+msgid "plugins.generic.xmlConverter.generate.submit"
+msgstr "Generate publication XML"
+
+msgid "plugins.generic.xmlConverter.generate.preview.source.publication"
+msgstr "from publication"
+
+msgid "plugins.generic.xmlConverter.generate.preview.source.journal"
+msgstr "from journal default"
+
+msgid "plugins.generic.xmlConverter.generate.datePublishedOverride.label"
+msgstr "Override published date (optional)"
+
+msgid "plugins.generic.xmlConverter.generate.datePublishedOverride.help"
+msgstr "Leave empty to use the publication's OJS date. Enter YYYY-MM-DD to override (e.g. when the publication is not yet scheduled)."
+
+msgid "plugins.generic.xmlConverter.generate.preview.articleTitle"
+msgstr "Article title"

@@ -27,29 +27,6 @@
 	{fbvFormSection}
 	{fbvElement type="select" id="galleyLocale" label="common.language" from=$supportedLocales selected=$galleyLocale|default:$formLocale size=$fbvStyles.size.MEDIUM translate=false inline=true required=true}
 	{/fbvFormSection}
-
-
-    {fbvFormSection title="plugins.generic.xmlConverter.createGalley.customModifications"}
-
-		{fbvFormSection list="true"}
-			{fbvElement type="checkbox" id="createJournalMeta" checked=false label="plugins.generic.xmlConverter.createGalley.journalMeta"}
-			{fbvElement type="checkbox" id="createArticlelMetaLicense" checked=false label="plugins.generic.xmlConverter.createGalley.createArticlelMetaLicense"}
-			{fbvElement type="checkbox" id="createArticlelMetaHistory" checked=false label="plugins.generic.xmlConverter.createGalley.createArticlelMetaHistory"}
-		{/fbvFormSection}
-
-		{fbvFormSection}
-			{fbvElement type="text" label="plugins.generic.xmlConverter.createGalley.fpage" name="createFpage" id="createFpage" maxlength="4" inline=true size=$fbvStyles.size.SMALL}
-			{fbvElement type="text" label="plugins.generic.xmlConverter.createGalley.lpage" name="createLpage" id="createLpage" maxlength="4" inline=true size=$fbvStyles.size.SMALL}
-		{/fbvFormSection}
-
-       {fbvFormSection}
-	        {fbvElement type="text" label="plugins.generic.xmlConverter.createGalley.datePublished" name="createDatePublished" id="createDatePublished" value=$datePublished maxlength="10" inline=true size=$fbvStyles.size.SMALL required=true}
-       {/fbvFormSection}
-
-
-
-    {/fbvFormSection}
-
     {/fbvFormArea}
 
     {fbvFormButtons submitText="common.save"}

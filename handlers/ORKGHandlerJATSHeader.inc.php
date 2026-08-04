@@ -1,107 +1,104 @@
 <?php
 
-/**
- * @file plugins/generic/xmlConverter/handlers/ORKGHandlerJATSHeader.inc.php
- *
- * @class ORKGHandlerJATSHeader
- *
- * @brief Processes ORKG-sourced content to add JATS headers
- */
-
 class ORKGHandlerJATSHeader
 {
-    private SimpleXMLElement $contentDOM;
-
-    // Namespace constants
-    private const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
-    private const ALI_NAMESPACE = 'http://www.niso.org/schemas/ali/1.0';
-
-    // global  variables
-    private const PUBLISHER_NAME = 'TIB Open Publishing';
-    private const LICENSE_URL = 'http://creativecommons.org/licenses/by/4.0/';
-    private const LICENSE_IMAGE_URL = 'https://mirrors.creativecommons.org/presskit/buttons/88x31/svg/by-sa.svg';
+    private $dom;
+    private $xpath;
+    private const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
     public function __construct(string $content)
     {
-        $this->contentDOM = new SimpleXMLElement($content);
-        $this->registerNamespaces();
-    }
+        if (trim($content) === '') {
+            throw new RuntimeException('ORKGHandlerJATSHeader: input is empty.');
+        }
+        $content = str_replace('<!-->X</!-->', '', $content);
+        $content = preg_replace('/<!-+>[^<]*<\/!-+>/', '', $content) ?? $content;
 
-
-    private function registerNamespaces(): void
-    {
-        $this->contentDOM->registerXPathNamespace('xlink', self::XLINK_NAMESPACE);
-        $this->contentDOM->registerXPathNamespace('ali', self::ALI_NAMESPACE);
+        $this->dom = new DOMDocument('1.0', 'UTF-8');
+        $this->dom->preserveWhiteSpace = false;
+        $this->dom->formatOutput = true;
+        if (!@$this->dom->loadXML($content)) {
+            throw new RuntimeException('ORKGHandlerJATSHeader: input is not valid XML.');
+        }
+        $this->xpath = new DOMXPath($this->dom);
+        $this->xpath->registerNamespace('xlink', self::XLINK_NS);
     }
 
     public function process(): string
     {
-        $this->addJournalMeta();
-        $this->updateContribGroup();
-        $this->modifyPermissions();
-        $this->addBackElement();
-
-        return $this->formatXML();
+        $this->removePlaceholders();
+        $this->dropByPath('//article-meta/article-id');
+        $this->dropByPath('//article-meta/permissions');
+        $this->dropByPath('//article-meta/pub-date');
+        $this->dropByPath('//article-meta/history');
+        $this->normalizeAuthorNames();
+        $this->ensureJournalMetaFirst();
+        $this->ensureBackElement();
+        return $this->dom->saveXML();
     }
 
-    private function addJournalMeta(): void
+    private function removePlaceholders(): void
     {
-        $front = $this->contentDOM->front ?? null;
-        if (!$front) {
-            throw new RuntimeException("Invalid XML: Missing <front> element.");
+        foreach ($this->xpath->query('//comment()') ?: [] as $c) {
+            $v = trim($c->nodeValue);
+            if ($v === '' || $v === 'X' || preg_match('/^[<>!\-\sX]+$/', $v)) {
+                $c->parentNode->removeChild($c);
+            }
         }
-
-        $journalMeta = $front->addChild('journal-meta');
-        $journalMeta->addChild('journal-id', '')->addAttribute('journal-id-type', 'publisher-id');
-        $journalMeta->addChild('issn', 'X')->addAttribute('pub-type', 'epub');
-
-        $publisher = $journalMeta->addChild('publisher');
-        $publisher->addChild('publisher-name', self::PUBLISHER_NAME);
-    }
-
-    private function updateContribGroup(): void
-    {
-        $contribGroups = $this->contentDOM->xpath('//article-meta/contrib-group');
-        if (empty($contribGroups)) {
-            throw new RuntimeException("Invalid XML: Missing <contrib-group> element.");
-        }
-
-        $contribGroup = $contribGroups[0];
-        $contribGroup->addChild('!--', 'X'); // Replace with meaningful logic if necessary
-    }
-
-    private function modifyPermissions(): void
-    {
-        $permissions = $this->contentDOM->xpath('//article-meta/permissions');
-        if (empty($permissions)) {
-            throw new RuntimeException("Invalid XML: Missing <permissions> element.");
-        }
-
-        $license = $permissions[0]->license ?? $permissions[0]->addChild('license');
-        $license->addAttribute('license-type', 'open-access');
-        $license->addAttribute('xlink:href', self::LICENSE_URL);
-        $license->addAttribute('xml:lang', 'en');
-    }
-
-    private function addInlineGraphicToLicense(SimpleXMLElement $license): void
-    {
-        $licenseP = $license->{'license-p'} ?? $license->addChild('license-p');
-        $inlineGraphic = $licenseP->addChild('inline-graphic');
-        $inlineGraphic->addAttribute('xlink:href', self::LICENSE_IMAGE_URL);
-    }
-
-    private function addBackElement(): void
-    {
-        $backElements = $this->contentDOM->xpath('//back');
-        if (count($backElements) < 1) {
-            $this->contentDOM->addChild('back');
+        foreach ($this->xpath->query('//contrib-group/text()') ?: [] as $t) {
+            if (trim($t->nodeValue) === 'X') $t->parentNode->removeChild($t);
         }
     }
 
-    private function formatXML(): string
+    private function dropByPath(string $path): void
     {
-        $domDocument = dom_import_simplexml($this->contentDOM)->ownerDocument;
-        $domDocument->formatOutput = true;
-        return $domDocument->saveXML();
+        foreach ($this->xpath->query($path) ?: [] as $n) {
+            $n->parentNode->removeChild($n);
+        }
+    }
+
+    private function normalizeAuthorNames(): void
+    {
+        foreach ($this->xpath->query('//contrib-group/contrib/string-name') ?: [] as $sn) {
+            $label = trim($sn->textContent ?? '');
+            if ($label === '') continue;
+
+            $surname = $given = null;
+            if (strpos($label, ',') !== false) {
+                [$surname, $given] = array_map('trim', explode(',', $label, 2));
+            } else {
+                $parts = preg_split('/\s+/', $label);
+                if (count($parts) >= 2) {
+                    $surname = array_pop($parts);
+                    $given = implode(' ', $parts);
+                }
+            }
+            if (!$surname || !$given) continue;
+
+            $name = $this->dom->createElement('name');
+            $name->appendChild($this->dom->createElement('surname', $surname));
+            $name->appendChild($this->dom->createElement('given-names', $given));
+            $sn->parentNode->replaceChild($name, $sn);
+        }
+    }
+
+    private function ensureJournalMetaFirst(): void
+    {
+        $front = $this->xpath->query('//front')->item(0);
+        if (!$front) throw new RuntimeException('ORKGHandlerJATSHeader: missing <front>.');
+        $articleMeta = $this->xpath->query('./article-meta', $front)->item(0);
+        if (!$articleMeta) throw new RuntimeException('ORKGHandlerJATSHeader: missing <article-meta>.');
+        $journalMeta = $this->xpath->query('./journal-meta', $front)->item(0);
+        if ($journalMeta && $journalMeta->previousSibling !== null) {
+            $front->insertBefore($journalMeta, $articleMeta);
+        }
+    }
+
+    private function ensureBackElement(): void
+    {
+        if ($this->xpath->query('//back')->length === 0) {
+            $article = $this->xpath->query('/article')->item(0);
+            if ($article) $article->appendChild($this->dom->createElement('back'));
+        }
     }
 }

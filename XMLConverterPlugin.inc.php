@@ -114,6 +114,7 @@ class xmlConverterPlugin extends GenericPlugin
 					// Add Create Galley button for XML files
 					if (strtolower($fileExtension) == 'text/xml' || strtolower($fileExtension) == 'application/xml') {
 						$this->_createGalleyAction($row, $dispatcher, $request, $submissionFile, $stageId, $fileStage);
+						$this->_generatePublicationXmlAction($row, $dispatcher, $request, $submissionFile, $stageId, $fileStage);
 					}
 
 					// Add conversion buttons (only if Java is available)
@@ -155,6 +156,8 @@ class xmlConverterPlugin extends GenericPlugin
 				case "xmlConverterConverter/createGalleyForm":
 				case "xmlConverterConverter/createGalley":
 				case "xmlConverterConverter/createServiceFileForm":
+				case "xmlConverterConverter/generatePublicationXmlForm":
+				case "xmlConverterConverter/generatePublicationXml":
 					$this->import('handlers/XMLConverterHandler');
 					define('HANDLER_CLASS', 'xmlConverterHandler');
 					return true;
@@ -284,6 +287,25 @@ class xmlConverterPlugin extends GenericPlugin
 			null
 		));
 
+	}
+
+	private function _generatePublicationXmlAction($row, Dispatcher $dispatcher, PKPRequest $request, $submissionFile, int $stageId, int $fileStage): void
+	{
+		$actionArgs = array(
+			'submissionId' => $submissionFile->getData('submissionId'),
+			'stageId' => $stageId,
+			'fileStage' => $fileStage,
+			'submissionFileId' => $submissionFile->getData('id')
+		);
+		$row->addAction(new LinkAction(
+			'generatePublicationXmlForm',
+			new AjaxModal(
+				$dispatcher->url($request, ROUTE_PAGE, null, 'xmlConverterConverter', 'generatePublicationXmlForm', null, $actionArgs),
+				__('plugins.generic.xmlConverter.generate.modalTitle')
+			),
+			__('plugins.generic.xmlConverter.generate.linkLabel'),
+			null
+		));
 	}
 
 	/**

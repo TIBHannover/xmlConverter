@@ -32,3 +32,60 @@ msgstr "Jats-XML erstellen"
 msgid "plugins.generic.xmlConverter.button.processJatsImages"
 msgstr "JATS-Bilder herunterladen"
 
+
+msgid "plugins.generic.xmlConverter.generate.linkLabel"
+msgstr "Publikations-XML generieren"
+
+msgid "plugins.generic.xmlConverter.generate.error.noSource"
+msgstr "Quell-XML-Datei konnte nicht geladen werden."
+
+msgid "plugins.generic.xmlConverter.generate.error.cleaning"
+msgstr "Quell-XML konnte nicht bereinigt werden: {$msg}"
+
+msgid "plugins.generic.xmlConverter.generate.error.invalidXml"
+msgstr "Bereinigte XML ist nicht gültig."
+
+msgid "plugins.generic.xmlConverter.generate.modalTitle"
+msgstr "Publikations-XML generieren — Vorschau"
+
+msgid "plugins.generic.xmlConverter.generate.preview.intro"
+msgstr "Eine neue publication.xml wird neben dem unveränderten Original erzeugt. Die unten gelisteten OJS-Werte überschreiben die entsprechenden ORKG-Felder."
+
+msgid "plugins.generic.xmlConverter.generate.preview.note"
+msgstr "Alle gelisteten Felder werden überschrieben. Felder ohne OJS-Daten werden weggelassen — keine Platzhalter, keine Fehler."
+
+msgid "plugins.generic.xmlConverter.generate.preview.skipped"
+msgstr "Keine OJS-Daten vorhanden — dieser Block wird übersprungen."
+
+msgid "plugins.generic.xmlConverter.generate.preview.journalMeta"
+msgstr "Journal-Metadaten (journal-id, ISSN, Verlag)"
+
+msgid "plugins.generic.xmlConverter.generate.preview.pubDate"
+msgstr "Publikationsdatum"
+
+msgid "plugins.generic.xmlConverter.generate.preview.history"
+msgstr "Historie (received / accepted / published)"
+
+msgid "plugins.generic.xmlConverter.generate.preview.permissions"
+msgstr "Lizenz / Permissions (CC BY 4.0)"
+
+msgid "plugins.generic.xmlConverter.generate.preview.contribGroup"
+msgstr "Autor:innen (Namen, E-Mails, Affiliations)"
+
+msgid "plugins.generic.xmlConverter.generate.submit"
+msgstr "Publikations-XML generieren"
+
+msgid "plugins.generic.xmlConverter.generate.preview.source.publication"
+msgstr "aus Publikation"
+
+msgid "plugins.generic.xmlConverter.generate.preview.source.journal"
+msgstr "aus Journal-Default"
+
+msgid "plugins.generic.xmlConverter.generate.datePublishedOverride.label"
+msgstr "Publikationsdatum überschreiben (optional)"
+
+msgid "plugins.generic.xmlConverter.generate.datePublishedOverride.help"
+msgstr "Leer lassen, um das OJS-Publikationsdatum zu verwenden. JJJJ-MM-TT eingeben, um zu überschreiben (z.B. wenn die Publikation noch nicht terminiert ist)."
+
+msgid "plugins.generic.xmlConverter.generate.preview.articleTitle"
+msgstr "Artikeltitel"

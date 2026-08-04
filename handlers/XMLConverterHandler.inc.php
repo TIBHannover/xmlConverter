@@ -13,7 +13,7 @@ class xmlConverterHandler extends Handler
 	/** @var Publication */
 	public $publication;
 
-	protected array $allowedMethods = ['convertToJats', 'convertToTei', 'processJatsImages', 'createGalleyForm', 'createGalley', 'createServiceFileForm'];
+	protected array $allowedMethods = ['convertToJats', 'convertToTei', 'processJatsImages', 'createGalleyForm', 'createGalley', 'createServiceFileForm', 'generatePublicationXmlForm', 'generatePublicationXml'];
 
 	function __construct()
 	{
@@ -505,5 +505,157 @@ class xmlConverterHandler extends Handler
 		];
 
 		return $extToMime[$extension] ?? 'application/octet-stream';
+	}
+
+	public function generatePublicationXmlForm($args, $request): JSONMessage
+	{
+		import('plugins.generic.xmlConverter.controllers.grid.form.GeneratePublicationXmlForm');
+		$form = new GeneratePublicationXmlForm($request, $this->getPlugin(), $this->publication, $this->submission);
+		$form->initData();
+		return new JSONMessage(true, $form->fetch($request));
+	}
+
+	public function generatePublicationXml($args, $request): JSONMessage
+	{
+		import('plugins.generic.xmlConverter.handlers.ORKGHandlerJATSHeader');
+		import('plugins.generic.xmlConverter.classes.JATS');
+		import('plugins.generic.xmlConverter.controllers.grid.form.GeneratePublicationXmlForm');
+
+		$form = new GeneratePublicationXmlForm($request, $this->getPlugin(), $this->publication, $this->submission);
+		$form->readInputData();
+
+		$context = $request->getJournal();
+		$sourceFile = Services::get('submissionFile')->get((int)$request->getUserVar('submissionFileId'));
+		if (!$sourceFile) {
+			return new JSONMessage(false, __('plugins.generic.xmlConverter.generate.error.noSource'));
+		}
+
+		$sourceContent = Services::get('file')->fs->read($sourceFile->getData('path'));
+
+		try {
+			$cleanedXml = (new ORKGHandlerJATSHeader($sourceContent))->process();
+		} catch (Exception $e) {
+			return new JSONMessage(false, __('plugins.generic.xmlConverter.generate.error.cleaning', ['msg' => $e->getMessage()]));
+		}
+
+		$dom = new DOMDocument('1.0', 'UTF-8');
+		$dom->preserveWhiteSpace = false;
+		$dom->formatOutput = true;
+		if (!@$dom->loadXML($cleanedXml)) {
+			return new JSONMessage(false, __('plugins.generic.xmlConverter.generate.error.invalidXml'));
+		}
+
+		$dateOverride  = trim((string)$form->getData('datePublishedOverride'));
+		$datePublished = $dateOverride !== ''
+			? $dateOverride
+			: ($this->publication ? $this->publication->getData('datePublished') : null);
+		$copyrightYear = $datePublished ? date('Y', strtotime($datePublished)) : date('Y');
+		$licenseUrl    = $this->publication ? trim((string)$this->publication->getData('licenseUrl')) : '';
+
+		$fpage = $lpage = null;
+		if ($this->publication) {
+			$pagesRaw = trim((string)$this->publication->getData('pages'));
+			if (preg_match('/^(\d+)\s*[-\x{2013}\x{2014}]\s*(\d+)/u', $pagesRaw, $m)) {
+				$fpage = $m[1]; $lpage = $m[2];
+			} elseif (preg_match('/^(\d+)/', $pagesRaw, $m)) {
+				$fpage = $m[1];
+			}
+		}
+
+		JATS::getJournalMeta($dom, $context);
+		if ($this->publication) JATS::getArticleTitle($dom, $this->publication);
+		if ($datePublished) JATS::getJournalMetaPubDate($dom, $context, $this->submission, $datePublished, $fpage, $lpage);
+		JATS::getArticleMetaHistory($dom, $this->submission, $datePublished);
+		JATS::getArticleMetaCCBYLicense($dom, $context, $copyrightYear, $licenseUrl);
+		if ($this->publication) JATS::getContribGroup($dom, $this->publication);
+
+		$submissionDir = Services::get('submissionFile')->getSubmissionDir(
+			$this->submission->getData('contextId'),
+			$this->submission->getId()
+		);
+		$filesDir = Config::getVar('files', 'files_dir') . DIRECTORY_SEPARATOR;
+		$tmpFile = tempnam(sys_get_temp_dir(), 'publication-xml-');
+		file_put_contents($tmpFile, $dom->saveXML());
+
+		$newFileId = Services::get('file')->add(
+			$tmpFile,
+			$filesDir . $submissionDir . DIRECTORY_SEPARATOR . uniqid() . '.xml'
+		);
+
+		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
+		$newSubmissionFile = $submissionFileDao->newDataObject();
+		$newSubmissionFile->setAllData([
+			'fileId'       => $newFileId,
+			'assocType'    => $sourceFile->getData('assocType'),
+			'assocId'      => $sourceFile->getData('assocId'),
+			'fileStage'    => SUBMISSION_FILE_PRODUCTION_READY,
+			'mimetype'     => 'application/xml',
+			'locale'       => $sourceFile->getData('locale'),
+			'genreId'      => $sourceFile->getData('genreId'),
+			'name'         => $this->buildPublicationFileName($sourceFile),
+			'submissionId' => $this->submission->getId(),
+		]);
+		Services::get('submissionFile')->add($newSubmissionFile, $request);
+		@unlink($tmpFile);
+
+		return $request->redirectUrlJson($request->getDispatcher()->url(
+			$request, ROUTE_PAGE, null, 'workflow', 'access', null,
+			[
+				'submissionId' => $this->submission->getId(),
+				'stageId'      => $request->getUserVar('stageId'),
+			]
+		));
+	}
+
+	private function buildPublicationFileName($sourceFile): array
+	{
+		$submissionId = $this->submission->getId();
+		$base = $this->buildAuthorBaseName($submissionId);
+
+		$names = $sourceFile->getData('name');
+		$out = [];
+		if (is_array($names)) {
+			foreach (array_keys($names) as $locale) {
+				$out[$locale] = $base . '.xml';
+			}
+		} else {
+			$out[$sourceFile->getData('locale')] = $base . '.xml';
+		}
+		return $out;
+	}
+
+	private function buildAuthorBaseName($submissionId): string
+	{
+		$authors = $this->publication ? $this->publication->getData('authors') : null;
+
+		$lastNames = [];
+		if ($authors && (is_array($authors) || $authors instanceof Traversable)) {
+			foreach ($authors as $a) {
+				$fam = $this->sanitizeNamePart((string)$a->getLocalizedFamilyName());
+				if ($fam === '') {
+					$fam = $this->sanitizeNamePart((string)$a->getLocalizedGivenName());
+				}
+				if ($fam !== '') $lastNames[] = $fam;
+			}
+		}
+
+		$count = count($lastNames);
+		if ($count === 0) return (string)$submissionId;
+		if ($count === 1) return $submissionId . '_' . $lastNames[0];
+		if ($count === 2) return $submissionId . '_' . $lastNames[0] . '_and_' . $lastNames[1];
+		return $submissionId . '_' . $lastNames[0] . '_et_al';
+	}
+
+	private function sanitizeNamePart(string $name): string
+	{
+		$name = trim($name);
+		if ($name === '') return '';
+		if (function_exists('iconv')) {
+			$t = @iconv('UTF-8', 'ASCII//TRANSLIT', $name);
+			if ($t !== false) $name = $t;
+		}
+		$name = preg_replace('/\s+/', '_', $name);
+		$name = preg_replace('/[^A-Za-z0-9_-]/', '', $name);
+		return trim($name, '_');
 	}
 }

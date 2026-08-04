@@ -86,7 +86,7 @@ class TextureArticleGalleyForm extends Form
      */
     function readInputData()
     {
-        $this->readUserVars(array('label', 'galleyLocale', 'submissionFileId', 'fileStage', 'createArticlelMetaLicense', 'createArticlelMetaHistory', 'createJournalMeta', 'createFpage', 'createLpage', 'createDatePublished', 'onlineIssn', 'publisherInstitution'));
+        $this->readUserVars(array('label', 'galleyLocale', 'submissionFileId', 'fileStage'));
     }
 
     /**
@@ -99,35 +99,16 @@ class TextureArticleGalleyForm extends Form
         $articleGalleyDao = DAORegistry::getDAO('ArticleGalleyDAO');
 
         $request = Application::get()->getRequest();
-        $context = $request->getJournal();
-        $datePublished = $this->getData('createDatePublished') ? $this->getData('createDatePublished') : $this->getPublication()->getData('datePublished');
 
         $sourceFile = Services::get('submissionFile')->get($this->getData('submissionFileId'));
 
         $submissionDir = Services::get('submissionFile')->getSubmissionDir($this->getSubmission()->getData('contextId'), $this->getSubmission()->getId());
         $files_dir = Config::getVar('files', 'files_dir') . DIRECTORY_SEPARATOR;
 
-        $origDocument = new DOMDocument('1.0', 'utf-8');
-        $sourceFileContent = Services::get('file')->fs->read($sourceFile->getData('path'));
-        $origDocument->loadXML($sourceFileContent);
-
-        $copyrightYear = $this->getCopyrightYear($request);
-
-        if ($this->getData('createArticlelMetaLicense'))
-            JATS::getArticleMetaCCBYLicense($origDocument, $context, $copyrightYear);
-
-        if ($this->getData('createJournalMeta'))
-            JATS::getJournalMeta($origDocument, $context);
-
-        JATS::getJournalMetaPubDate($origDocument, $context, $this->getSubmission(), $datePublished, $this->getData('createFpage'), $this->getData('createLpage'));
-
-        if ($this->getData('createArticlelMetaHistory')) {
-            JATS::getArticleMetaHistory($origDocument, $this->getSubmission(), $datePublished);
-        }
-
-        $tmpFile = tempnam(sys_get_temp_dir(), 'texture-update-xml');
-        file_put_contents($tmpFile, $origDocument->saveXML());
-        $newFileId = Services::get('file')->add($tmpFile, $files_dir . $submissionDir . DIRECTORY_SEPARATOR . uniqid() . '.xml');
+        $newFileId = Services::get('file')->add(
+            $files_dir . $sourceFile->getData('path'),
+            $files_dir . $submissionDir . DIRECTORY_SEPARATOR . uniqid() . '.xml'
+        );
         $newSubmissionFile = $submissionFileDao->newDataObject();
         $newSubmissionFile->setAllData(
             [
@@ -143,9 +124,6 @@ class TextureArticleGalleyForm extends Form
             ]
         );
         $newSubmissionFile = Services::get('submissionFile')->add($newSubmissionFile, $request);
-        unlink($tmpFile);
-
-
         $articleGalley = $articleGalleyDao->newDataObject();
         $articleGalley->setData('publicationId', $this->_publication->getId());
         $articleGalley->setLabel($this->getData('label'));
