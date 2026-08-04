@@ -11,30 +11,43 @@
  */
 import CreateGalleyModal from './Components/CreateGalleyModal.vue';
 import AddExternalFileModal from './Components/AddExternalFileModal.vue';
+import GeneratePublicationXmlModal from './Components/GeneratePublicationXmlModal.vue';
 
 pkp.registry.registerComponent('CreateGalleyModal', CreateGalleyModal);
 pkp.registry.registerComponent('AddExternalFileModal', AddExternalFileModal);
+pkp.registry.registerComponent('GeneratePublicationXmlModal', GeneratePublicationXmlModal);
 
-pkp.registry.storeExtend(
+const fileManagerStores = [
 	'fileManager_PRODUCTION_READY_FILES',
-	(piniaContext) => {
+	'fileManager_COPYEDITED_FILES',
+];
+
+fileManagerStores.forEach((fileManagerStore) =>
+	pkp.registry.storeExtend(fileManagerStore, (piniaContext) => {
 		const dashboardStore = pkp.registry.getPiniaStore('dashboard');
 		const fileStore = piniaContext.store;
 
+		const allowedWorkflowStages = [
+			pkp.const.WORKFLOW_STAGE_ID_EDITING,
+			pkp.const.WORKFLOW_STAGE_ID_PRODUCTION,
+		];
+
 		if (
 			dashboardStore.dashboardPage !== 'editorialDashboard' ||
-			fileStore.props.submissionStageId !==
-			pkp.const.WORKFLOW_STAGE_ID_PRODUCTION
+			!allowedWorkflowStages.includes(fileStore.props.submissionStageId)
 		) {
 			return;
 		}
 
+		const supportedExtensions = ['.xml', '.html'];
+
 		const {useModal} = pkp.modules.useModal;
 		const {useLocalize} = pkp.modules.useLocalize;
+		const {useFetch} = pkp.modules.useFetch;
 		const {useUrl} = pkp.modules.useUrl;
 		const {useDataChanged} = pkp.modules.useDataChanged;
 
-		const {openSideModal} = useModal();
+		const {openSideModal, openDialog} = useModal();
 		const {t, localize} = useLocalize();
 		const {triggerDataChange} = useDataChanged();
 
@@ -73,7 +86,7 @@ pkp.registry.storeExtend(
 
 		fileStore.extender.extendFn('getItemActions', (itemActions, args) => {
 			const localizedName = localize(args.file.name);
-			if (!localizedName.endsWith('.xml')) {
+			if (!supportedExtensions.some((extension) => localizedName.endsWith(extension))) {
 				return itemActions;
 			}
 
@@ -92,9 +105,70 @@ pkp.registry.storeExtend(
 					});
 				}
 			});
+
+			newActions.push({
+				label: t('plugins.generic.xmlConverter.generate.linkLabel'),
+				name: 'generatePublicationXml',
+				icon: 'FileText',
+				actionFn: ({file}) => {
+					const {apiUrl} = useUrl(
+						`submissions/xmlConverter/generatePublicationXml/${file.submissionId}/${file.id}`
+					);
+					const {apiUrl: previewApiUrl} = useUrl(
+						`submissions/xmlConverter/generatePublicationXmlPreview/${file.submissionId}`
+					);
+					openSideModal(GeneratePublicationXmlModal, {
+						url: apiUrl.value,
+						previewUrl: previewApiUrl.value,
+						onClose: dataUpdateCallback
+					});
+				}
+			});
+
+			newActions.push({
+				label: t('plugins.generic.xmlConverter.button.processJatsImages'),
+				name: 'processJatsImages',
+				icon: 'Image',
+				actionFn: ({file}) => {
+					const {apiUrl} = useUrl(
+						`submissions/xmlConverter/processJatsImages/${file.submissionId}/${file.id}`
+					);
+					openDialog({
+						title: t('plugins.generic.xmlConverter.button.processJatsImages'),
+						message: t('plugins.generic.xmlConverter.button.processJatsImages.dialog'),
+						actions: [
+							{
+								label: t('common.ok'),
+								isPrimary: true,
+								callback: async (close) => {
+									close();
+									const {fetch} = useFetch(apiUrl.value, {
+										method: 'POST',
+										headers: {
+											'Content-Type': 'application/json',
+											'X-Csrf-Token': pkp.currentUser.csrfToken
+										}
+									});
+									await fetch().then(() => {
+										dataUpdateCallback();
+									});
+								}
+							},
+							{
+								label: t('common.cancel'),
+								isWarnable: true,
+								callback: (close) => {
+									close();
+								}
+							}
+						]
+					});
+				}
+			});
+
 			return newActions;
 		});
-	},
+	})
 );
 
 /*
@@ -103,6 +177,7 @@ const localeKeys = [
 	// common
 	t("common.cancel"),
 	t("common.language"),
+	t("common.ok"),
 	t("common.save"),
 	t("common.type"),
 	t("submission.layout.galleyLabel"),
@@ -124,6 +199,14 @@ const localeKeys = [
 	t("plugins.generic.xmlConverter.createServiceFile.orkg"),
 	t("plugins.generic.xmlConverter.createServiceFile.upload"),
 	t("plugins.generic.xmlConverter.links.createGalley"),
+	t("plugins.generic.xmlConverter.button.processJatsImages"),
+	t("plugins.generic.xmlConverter.button.processJatsImages.dialog"),
+	t("plugins.generic.xmlConverter.generate.linkLabel"),
+	t("plugins.generic.xmlConverter.generate.modalTitle"),
+	t("plugins.generic.xmlConverter.generate.datePublishedOverride"),
+	t("plugins.generic.xmlConverter.generate.datePublishedOverride.description"),
+	t("plugins.generic.xmlConverter.generate.licenseUrlOverride"),
+	t("plugins.generic.xmlConverter.generate.licenseUrlOverride.description"),
 
 	// conversions
 	t("plugins.generic.xmlConverter.button.jatsToTei"),

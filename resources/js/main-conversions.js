@@ -15,7 +15,7 @@ pkp.registry.storeExtend(
 	(piniaContext) => {
 		const fileStore = piniaContext.store;
 
-		const supportedMimetypes = ['text/xml', 'application/xml'];
+		const supportedMimetypes = ['text/xml', 'application/xml', 'text/html'];
 
 		const {useLocalize} = pkp.modules.useLocalize;
 		const {useModal} = pkp.modules.useModal;

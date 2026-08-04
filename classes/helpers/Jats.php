@@ -17,12 +17,15 @@
 namespace APP\plugins\generic\xmlConverter\classes\helpers;
 
 use APP\facades\Repo;
+use APP\publication\Publication;
 use APP\submission\Submission;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use Exception;
 use PKP\context\Context;
+use PKP\decision\Decision;
+use PKP\facades\Locale;
 
 class Jats extends DOMDocument
 {
@@ -82,15 +85,10 @@ class Jats extends DOMDocument
             $history->appendChild($dateReceived);
         }
 
-        $dateAccepted = null;
-
         $decisions = Repo::decision()->getCollector()
             ->filterBySubmissionIds([$submission->getId()])
             ->getMany();
-        foreach ($decisions as $decision) {
-            if ($decision->getData('stageId') == WORKFLOW_STAGE_ID_EXTERNAL_REVIEW && $decision->getData('decision') == SUBMISSION_EDITOR_DECISION_ACCEPT)
-                $dateAccepted = $decision->getData('dateDecided');
-        }
+        $dateAccepted = self::selectAcceptedDate($decisions);
         if ($dateAccepted) {
             $history->appendChild(self::getDate($origDocument, $dateAccepted, 'accepted'));
         }
@@ -151,19 +149,19 @@ class Jats extends DOMDocument
     /**
      * Updates a given DOMDocument with the permissions and licensing information.
      */
-    public static function updateArticleMetaCCBYLicense(DOMDocument $origDocument, $context, int $copyrightYear = null): void
+    public static function updateArticleMetaCCBYLicense(DOMDocument $origDocument, $context, int $copyrightYear = null, string $licenseUrlOverride = null): void
     {
         $xpath = new DOMXpath($origDocument);
         $permissions = $xpath->query("//article/front/article-meta/permissions");
 
         foreach ($permissions as $permission) {
-            if (!empty($permission->parent)) {
-                $permission->parent->removeChild($permission);
+            if ($permission->parentNode) {
+                $permission->parentNode->removeChild($permission);
             }
         }
 
         $articleMeta = $xpath->query("//article/front/article-meta");
-        $licenseUrl = $context->getData('licenseUrl');
+        $licenseUrl = trim((string)$licenseUrlOverride) ?: $context->getData('licenseUrl');
         if (count($articleMeta) > 0 and $licenseUrl) {
             preg_match('/http[s]?:(www\.)?\/\/creativecommons.org\/licenses\/([a-z]+(-[a-z]+)*)\/(\d.0)\/*([a-z]*).*/i', $licenseUrl, $matches);
             if (count($matches) > 5 and $matches[2] and $matches[4]) {
@@ -198,6 +196,130 @@ class Jats extends DOMDocument
                 $permissionNode->appendChild($copyrightLicenseNode);
                 $articleMeta[0]->appendChild($permissionNode);
             }
+        }
+    }
+
+    /**
+     * Selects the most recent accepted date from a set of editorial decisions.
+     */
+    public static function selectAcceptedDate(iterable $decisions): ?string
+    {
+        $acceptStages = [WORKFLOW_STAGE_ID_EXTERNAL_REVIEW];
+
+        $dateAccepted = null;
+        foreach ($decisions as $decision) {
+            if ($decision->getData('decision') == Decision::ACCEPT
+                && in_array($decision->getData('stageId'), $acceptStages)
+                && !empty($decision->getData('dateDecided'))) {
+                if (!$dateAccepted || strtotime($decision->getData('dateDecided')) > strtotime($dateAccepted)) {
+                    $dateAccepted = $decision->getData('dateDecided');
+                }
+            }
+        }
+
+        return $dateAccepted;
+    }
+
+    /**
+     * Updates a given DOMDocument with the article title.
+     */
+    public static function updateArticleTitle(DOMDocument $origDocument, Publication $publication): void
+    {
+        $title = trim((string)$publication->getLocalizedTitle());
+        if ($title === '') {
+            return;
+        }
+
+        $xpath = new DOMXpath($origDocument);
+        $articleMeta = $xpath->query('//article/front/article-meta')->item(0);
+        if (!$articleMeta) {
+            return;
+        }
+
+        foreach ($xpath->query('./title-group', $articleMeta) ?: [] as $node) {
+            $articleMeta->removeChild($node);
+        }
+
+        $titleGroup = $origDocument->createElement('title-group');
+        $titleGroup->appendChild($origDocument->createElement('article-title', htmlspecialchars($title, ENT_XML1)));
+
+        $contribGroup = $xpath->query('./contrib-group', $articleMeta)->item(0);
+        if ($contribGroup) {
+            $articleMeta->insertBefore($titleGroup, $contribGroup);
+        } else {
+            $articleMeta->appendChild($titleGroup);
+        }
+    }
+
+    /**
+     * Updates a given DOMDocument with the contributor group and affiliations.
+     */
+    public static function updateContribGroup(DOMDocument $origDocument, Publication $publication): void
+    {
+        $xpath = new DOMXpath($origDocument);
+        $articleMeta = $xpath->query('//article/front/article-meta')->item(0);
+        if (!$articleMeta) {
+            return;
+        }
+
+        foreach ($xpath->query('./contrib-group | ./aff', $articleMeta) ?: [] as $node) {
+            $articleMeta->removeChild($node);
+        }
+
+        $authors = $publication->getData('authors');
+        if (!$authors || (is_countable($authors) && count($authors) === 0)) {
+            return;
+        }
+
+        $locale = $publication->getData('locale') ?: Locale::getLocale();
+        $contribGroup = $origDocument->createElement('contrib-group');
+        $contribGroup->setAttribute('content-type', 'author');
+
+        $affiliations = [];
+        $affiliationIndex = 1;
+        foreach ($authors as $author) {
+            $given = (string)$author->getLocalizedGivenName($locale);
+            $family = (string)$author->getLocalizedFamilyName($locale);
+            $email = (string)$author->getEmail();
+            $orcid = (string)$author->getOrcid();
+            $affiliation = (string)$author->getLocalizedAffiliationNamesAsString($locale);
+
+            $contrib = $origDocument->createElement('contrib');
+            $contrib->setAttribute('contrib-type', 'person');
+            $name = $origDocument->createElement('name');
+            if ($family !== '') {
+                $name->appendChild($origDocument->createElement('surname', htmlspecialchars($family, ENT_XML1)));
+            }
+            if ($given !== '') {
+                $name->appendChild($origDocument->createElement('given-names', htmlspecialchars($given, ENT_XML1)));
+            }
+            $contrib->appendChild($name);
+            if ($email !== '') {
+                $contrib->appendChild($origDocument->createElement('email', htmlspecialchars($email, ENT_XML1)));
+            }
+            if ($orcid !== '') {
+                $contribId = $origDocument->createElement('contrib-id', htmlspecialchars($orcid, ENT_XML1));
+                $contribId->setAttribute('contrib-id-type', 'orcid');
+                $contrib->appendChild($contribId);
+            }
+            if ($affiliation !== '') {
+                if (!isset($affiliations[$affiliation])) {
+                    $affiliations[$affiliation] = 'aff-' . $affiliationIndex++;
+                }
+                $xref = $origDocument->createElement('xref');
+                $xref->setAttribute('ref-type', 'aff');
+                $xref->setAttribute('rid', $affiliations[$affiliation]);
+                $contrib->appendChild($xref);
+            }
+            $contribGroup->appendChild($contrib);
+        }
+        $articleMeta->appendChild($contribGroup);
+
+        foreach ($affiliations as $text => $id) {
+            $aff = $origDocument->createElement('aff');
+            $aff->setAttribute('id', $id);
+            $aff->appendChild($origDocument->createElement('institution', htmlspecialchars($text, ENT_XML1)));
+            $articleMeta->appendChild($aff);
         }
     }
 
