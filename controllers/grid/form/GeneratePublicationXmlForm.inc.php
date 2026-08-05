@@ -1,6 +1,7 @@
 <?php
 
 import('lib.pkp.classes.form.Form');
+import('plugins.generic.xmlConverter.classes.JATS');
 
 class GeneratePublicationXmlForm extends Form
 {
@@ -42,6 +43,7 @@ class GeneratePublicationXmlForm extends Form
             'submissionFileId' => $request->getUserVar('submissionFileId'),
             'preview'          => $this->buildPreview($context),
             'datePublished'    => $datePublished ? date('Y-m-d', strtotime($datePublished)) : '',
+            'pages'            => $this->publication ? trim((string)$this->publication->getData('pages')) : '',
         ]);
         return parent::fetch($request, $template, $display);
     }
@@ -66,12 +68,9 @@ class GeneratePublicationXmlForm extends Form
         }
 
         $pagesRaw = $this->publication ? trim((string)$this->publication->getData('pages')) : '';
-        $fpage = $lpage = '';
-        if (preg_match('/^(\d+)\s*[-\x{2013}\x{2014}]\s*(\d+)/u', $pagesRaw, $m)) {
-            $fpage = $m[1]; $lpage = $m[2];
-        } elseif (preg_match('/^(\d+)/', $pagesRaw, $m)) {
-            $fpage = $m[1];
-        }
+        [$fpage, $lpage] = JATS::parsePages($pagesRaw);
+        $fpage = $fpage ?? '';
+        $lpage = $lpage ?? '';
 
         $authors = $this->publication ? $this->publication->getData('authors') : [];
         $authorList = [];
@@ -136,7 +135,7 @@ class GeneratePublicationXmlForm extends Form
         ];
     }
 
-    public function readInputData() { $this->readUserVars(['datePublishedOverride']); }
+    public function readInputData() { $this->readUserVars(['datePublishedOverride', 'pagesOverride']); }
     public function getSubmission()  { return $this->submission; }
     public function getPublication() { return $this->publication; }
     public function getPlugin()      { return $this->plugin; }

@@ -552,15 +552,11 @@ class xmlConverterHandler extends Handler
 		$copyrightYear = $datePublished ? date('Y', strtotime($datePublished)) : date('Y');
 		$licenseUrl    = $this->publication ? trim((string)$this->publication->getData('licenseUrl')) : '';
 
-		$fpage = $lpage = null;
-		if ($this->publication) {
-			$pagesRaw = trim((string)$this->publication->getData('pages'));
-			if (preg_match('/^(\d+)\s*[-\x{2013}\x{2014}]\s*(\d+)/u', $pagesRaw, $m)) {
-				$fpage = $m[1]; $lpage = $m[2];
-			} elseif (preg_match('/^(\d+)/', $pagesRaw, $m)) {
-				$fpage = $m[1];
-			}
-		}
+		$pagesOverride = trim((string)$form->getData('pagesOverride'));
+		$pagesRaw = $pagesOverride !== ''
+			? $pagesOverride
+			: ($this->publication ? (string)$this->publication->getData('pages') : '');
+		[$fpage, $lpage] = JATS::parsePages($pagesRaw);
 
 		JATS::getJournalMeta($dom, $context);
 		if ($this->publication) JATS::getArticleTitle($dom, $this->publication);
@@ -595,8 +591,10 @@ class xmlConverterHandler extends Handler
 			'name'         => $this->buildPublicationFileName($sourceFile),
 			'submissionId' => $this->submission->getId(),
 		]);
-		Services::get('submissionFile')->add($newSubmissionFile, $request);
+		$newSubmissionFile = Services::get('submissionFile')->add($newSubmissionFile, $request);
 		@unlink($tmpFile);
+
+		$this->copyDependentFiles($sourceFile, $newSubmissionFile, $filesDir, $submissionDir, $request);
 
 		return $request->redirectUrlJson($request->getDispatcher()->url(
 			$request, ROUTE_PAGE, null, 'workflow', 'access', null,
@@ -605,6 +603,40 @@ class xmlConverterHandler extends Handler
 				'stageId'      => $request->getUserVar('stageId'),
 			]
 		));
+	}
+
+	private function copyDependentFiles($sourceFile, $newSubmissionFile, string $filesDir, string $submissionDir, $request): void
+	{
+		$submissionFileDao = DAORegistry::getDAO('SubmissionFileDAO');
+		$dependentFiles = Services::get('submissionFile')->getMany([
+			'assocTypes' => [ASSOC_TYPE_SUBMISSION_FILE],
+			'assocIds' => [$sourceFile->getData('id')],
+			'submissionIds' => [$this->submission->getId()],
+			'fileStages' => [SUBMISSION_FILE_DEPENDENT],
+			'includeDependentFiles' => true,
+		]);
+
+		foreach ($dependentFiles as $dependentFile) {
+			$extension = pathinfo($dependentFile->getData('path'), PATHINFO_EXTENSION);
+			$newDependentFileId = Services::get('file')->add(
+				$filesDir . $dependentFile->getData('path'),
+				$filesDir . $submissionDir . DIRECTORY_SEPARATOR . uniqid() . ($extension !== '' ? '.' . $extension : '')
+			);
+
+			$newDependentFile = $submissionFileDao->newDataObject();
+			$newDependentFile->setAllData([
+				'fileId' => $newDependentFileId,
+				'assocType' => ASSOC_TYPE_SUBMISSION_FILE,
+				'assocId' => $newSubmissionFile->getData('id'),
+				'fileStage' => SUBMISSION_FILE_DEPENDENT,
+				'mimetype' => $dependentFile->getData('mimetype'),
+				'locale' => $dependentFile->getData('locale'),
+				'genreId' => $dependentFile->getData('genreId'),
+				'name' => $dependentFile->getData('name'),
+				'submissionId' => $this->submission->getId(),
+			]);
+			Services::get('submissionFile')->add($newDependentFile, $request);
+		}
 	}
 
 	private function buildPublicationFileName($sourceFile): array

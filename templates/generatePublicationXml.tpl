@@ -32,6 +32,10 @@
 			{fbvElement type="text" id="datePublishedOverride" name="datePublishedOverride" value=$datePublished maxlength="10" size=$fbvStyles.size.SMALL placeholder="YYYY-MM-DD"}
 		{/fbvFormSection}
 
+		{fbvFormSection title="plugins.generic.xmlConverter.generate.pagesOverride.label" description="plugins.generic.xmlConverter.generate.pagesOverride.help"}
+			{fbvElement type="text" id="pagesOverride" name="pagesOverride" value=$pages maxlength="25" size=$fbvStyles.size.SMALL placeholder="1-14"}
+		{/fbvFormSection}
+
 	{/fbvFormArea}
 
 	{fbvFormButtons submitText="plugins.generic.xmlConverter.generate.submit"}

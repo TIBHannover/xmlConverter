@@ -80,6 +80,18 @@ class JATS extends \DOMDocument
     }
 
 
+    public static function parsePages(string $pagesRaw): array
+    {
+        $pagesRaw = trim($pagesRaw);
+        if (preg_match('/^(\d+)\s*[-\x{2013}\x{2014}]\s*(\d+)/u', $pagesRaw, $m)) {
+            return [$m[1], $m[2]];
+        }
+        if (preg_match('/^(\d+)/', $pagesRaw, $m)) {
+            return [$m[1], null];
+        }
+        return [null, null];
+    }
+
     public static function selectAcceptedDate(array $decisions): ?string
     {
         $acceptStages = [

@@ -154,5 +154,11 @@ msgstr "Override published date (optional)"
 msgid "plugins.generic.xmlConverter.generate.datePublishedOverride.help"
 msgstr "Leave empty to use the publication's OJS date. Enter YYYY-MM-DD to override (e.g. when the publication is not yet scheduled)."
 
+msgid "plugins.generic.xmlConverter.generate.pagesOverride.label"
+msgstr "Override page numbers (optional)"
+
+msgid "plugins.generic.xmlConverter.generate.pagesOverride.help"
+msgstr "Leave empty to use the publication's OJS pages. Enter a page range such as 1-14 (or a single page) to override."
+
 msgid "plugins.generic.xmlConverter.generate.preview.articleTitle"
 msgstr "Article title"

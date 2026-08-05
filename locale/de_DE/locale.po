@@ -87,5 +87,11 @@ msgstr "Publikationsdatum überschreiben (optional)"
 msgid "plugins.generic.xmlConverter.generate.datePublishedOverride.help"
 msgstr "Leer lassen, um das OJS-Publikationsdatum zu verwenden. JJJJ-MM-TT eingeben, um zu überschreiben (z.B. wenn die Publikation noch nicht terminiert ist)."
 
+msgid "plugins.generic.xmlConverter.generate.pagesOverride.label"
+msgstr "Seitenzahlen überschreiben (optional)"
+
+msgid "plugins.generic.xmlConverter.generate.pagesOverride.help"
+msgstr "Leer lassen, um die OJS-Seitenzahlen der Publikation zu verwenden. Seitenbereich wie 1-14 (oder einzelne Seite) eingeben, um zu überschreiben."
+
 msgid "plugins.generic.xmlConverter.generate.preview.articleTitle"
 msgstr "Artikeltitel"
